@@ -1,0 +1,69 @@
+const int analogPin = A5;  // pin ADC fuel sensor
+int adcValue = 0;
+float voltage = 0.0;
+float fuelPercent = 0.0;
+
+// Data kalibrasi (V vs %)
+const int N = 5;
+float voltTable[N] = {0.100, 0.575, 1.050, 1.390, 1.785};  // Volt
+float fuelTable[N] = {100,   75,    50,    25,    0};      // Persen
+
+// Variabel millis
+unsigned long prevMillis = 0;
+const unsigned long interval = 1000; // 1 detik
+
+// Moving Average
+const int samples = 5;
+int readings[samples];
+int indexMA = 0;
+long total = 0;
+int averageADC = 0;
+
+float interpolate(float x, float xTable[], float yTable[], int size) {
+  if (x <= xTable[0]) return yTable[0];
+  if (x >= xTable[size - 1]) return yTable[size - 1];
+
+  for (int i = 0; i < size - 1; i++) {
+    if (x >= xTable[i] && x <= xTable[i + 1]) {
+      return yTable[i] + (x - xTable[i]) * 
+             (yTable[i + 1] - yTable[i]) / 
+             (xTable[i + 1] - xTable[i]);
+    }
+  }
+  return 0; // fallback
+}
+
+void setup() {
+  Serial.begin(115200);
+  for (int i = 0; i < samples; i++) readings[i] = 0;
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - prevMillis >= interval) {
+    prevMillis = currentMillis;
+
+    // --- Moving Average ---
+    total -= readings[indexMA];
+    readings[indexMA] = analogRead(analogPin);
+    total += readings[indexMA];
+    indexMA = (indexMA + 1) % samples;
+    averageADC = total / samples;
+
+    // konversi ke tegangan (0–5 V, Arduino Uno)
+    voltage = (averageADC * 5.0) / 1023.0;
+
+    // hitung persen fuel (pakai interpolasi tabel)
+    fuelPercent = interpolate(voltage, voltTable, fuelTable, N);
+
+    // tampilkan hasil
+    Serial.print("ADC Avg = ");
+    Serial.print(averageADC);
+    Serial.print(" | Voltage = ");
+    Serial.print(voltage, 3);
+    Serial.print(" V | Fuel = ");
+    Serial.print(fuelPercent, 1);
+    Serial.println(" %");
+  }
+}
